@@ -153,6 +153,10 @@ textarea{resize:vertical;color:#e8e8e8}
 .set-num.done{color:#5dde30}
 .set-input{background:#2a2a44;border:1px solid #3a3a5a;border-radius:5px;color:#f0f0f0;padding:5px 2px;font-size:13px;text-align:center}
 .set-input.done{color:#5dde30;border-color:#2a5a2a;background:#142014}
+.set-input.sugg::placeholder{color:#00c8e070;font-weight:700}
+.sugg-hint{display:none;align-items:center;gap:7px;background:#0e1a2a;border:1px solid #00c8e022;border-radius:8px;padding:7px 11px;margin-bottom:12px;font-size:11px;color:#7090a8;line-height:1.4}
+.sugg-hint.show{display:flex}
+.sugg-hint b{color:#00c8e0;font-weight:700}
 .chk-btn{width:24px;height:24px;border-radius:5px;border:2px solid #3a3a5a;background:#2a2a44;color:#888;font-size:11px;display:flex;align-items:center;justify-content:center;margin:0 auto}
 .chk-btn.done{background:#1a4a1a;border-color:#5dde30;color:#5dde30}
 .rm-set-btn{background:#22223a;border:1px solid #33334e;border-radius:6px;color:#7070a0;font-size:17px;width:28px;height:30px;text-align:center;padding:0;line-height:26px;font-family:'Barlow Condensed',sans-serif;font-weight:700}
@@ -260,6 +264,7 @@ textarea{resize:vertical;color:#e8e8e8}
 .lib-item-grp{font-size:9px;font-weight:800;letter-spacing:1px;color:#6a6a90;text-transform:uppercase;flex-shrink:0}
 .lib-demo-btn{flex-shrink:0;width:52px;background:none;border:none;border-left:1px solid #22223a;color:#7070a0;font-size:16px}
 .lib-demo-btn:active{background:#0e2a3a}
+.lib-demo-btn.has-img{color:#00c8e0}
 .lib-empty{padding:28px 18px;text-align:center;color:#5a5a7a;font-size:13px;line-height:1.6}
 .lib-foot{padding:10px 16px 14px;padding-bottom:calc(14px + env(safe-area-inset-bottom));border-top:1px solid #2e2e4a;background:#12122a;flex-shrink:0}
 .lib-manual{width:100%;background:#0e2a3a;border:1px solid #00c8e0;color:#00c8e0;border-radius:9px;padding:13px;font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:800;letter-spacing:1px;text-transform:uppercase}
@@ -404,6 +409,7 @@ textarea{resize:vertical;color:#e8e8e8}
       </div>
 
     </div>
+    <div class="sugg-hint" id="suggHint">💡 Faded numbers are <b>last week's</b> — type over them to log this week.</div>
     <div id="exerciseList"></div>
     <button class="add-ex-btn" onclick="addExercise()"><span style="font-size:18px;line-height:1">+</span> Add Exercise</button>
     <div style="height:60px"></div>
@@ -971,10 +977,25 @@ function syncMeta() {
   document.getElementById("dateMonth").value=parts[1]||"";
   document.getElementById("dateYear").value=parts[2]||"";
 }
+function prevWeekSets(exId) {
+  var n = parseInt(st.activeWeek.replace("week", ""));
+  if (isNaN(n) || n <= 1) return null;
+  var pw = st.tracking["week" + (n - 1)];
+  var day = pw ? pw[st.activeDay] : null;
+  if (!day || !day.sets) return null;
+  return day.sets[exId] || null;
+}
+function suggFor(prev, si, field) {
+  if (!prev || !prev[si]) return "";
+  var v = prev[si][field];
+  return (v === undefined || v === null) ? "" : String(v).trim();
+}
 function renderExercises() {
+  var suggCount = 0;
   var c=document.getElementById("exerciseList");c.innerHTML="";
   tpl().exercises.forEach(function(ex,xi){
     var sets=trk().sets[ex.id]||[];
+    var prev=prevWeekSets(ex.id);
     var done=sets.filter(function(s){return s.done;}).length;
     var hasN=ex.notes&&ex.notes.trim().length>0;
     var card=document.createElement("div");card.className="ex-card";
@@ -1016,7 +1037,18 @@ function renderExercises() {
       var row=document.createElement("div");row.className="set-row"+(set.done?" done":"");
       var nd=document.createElement("div");nd.className="col-set";nd.innerHTML="<span class=\"set-num"+(set.done?" done":"")+"\">"+(si+1)+"</span>";
       var flds=[["col-wt","weight"],["col-rp","reps"],["col-sm","rpe"],["col-sm","rir"],["col-rest","rest"]];
-      var inps=flds.map(function(fd){var d=document.createElement("div");d.className=fd[0];var inp=document.createElement("input");inp.className="set-input"+(set.done?" done":"");inp.placeholder="--";inp.value=set[fd[1]]||"";inp.oninput=(function(id,idx,field){return function(){onSetChange(id,idx,field,this.value);};})(ex.id,si,fd[1]);d.appendChild(inp);return d;});
+      var inps=flds.map(function(fd){
+        var d=document.createElement("div");d.className=fd[0];
+        var inp=document.createElement("input");inp.className="set-input"+(set.done?" done":"");
+        inp.value=set[fd[1]]||"";
+        inp.placeholder="--";
+        if((fd[1]==="weight"||fd[1]==="reps")&&!inp.value&&!set.done){
+          var sg=suggFor(prev,si,fd[1]);
+          if(sg){inp.placeholder=sg;inp.className+=" sugg";suggCount++;}
+        }
+        inp.oninput=(function(id,idx,field){return function(){onSetChange(id,idx,field,this.value);};})(ex.id,si,fd[1]);
+        d.appendChild(inp);return d;
+      });
       var cd=document.createElement("div");cd.className="col-chk";var cb=document.createElement("button");cb.className="chk-btn"+(set.done?" done":"");cb.textContent=set.done?"✓":"";cb.onclick=(function(id,idx){return function(){toggleSetDone(id,idx);};})(ex.id,si);cd.appendChild(cb);
       var rd=document.createElement("div");rd.className="col-rm";
       if(si===sets.length-1&&sets.length>1){var rb=document.createElement("button");rb.className="rm-set-btn";rb.textContent="−";rb.onclick=(function(i){return function(){removeSet(i);};})(xi);rd.appendChild(rb);}
@@ -1025,6 +1057,8 @@ function renderExercises() {
     var ab=document.createElement("button");ab.className="add-set-btn";ab.textContent="+ Add Set";ab.onclick=(function(i){return function(){addSet(i);};})(xi);card.appendChild(ab);
     c.appendChild(card);
   });
+  var sh2=document.getElementById("suggHint");
+  if(sh2)sh2.className="sugg-hint"+(suggCount>0?" show":"");
 }
 function updateProgress() {
   var all=tpl().exercises.reduce(function(acc,ex){return acc.concat(trk().sets[ex.id]||[]);;},[]);
@@ -1101,7 +1135,7 @@ var EX_LIB = {
   "Core":["Plank","Side Plank","Hanging Leg Raise","Cable Crunch","Crunch","Bicycle Crunch","Russian Twist","Ab Wheel Rollout","Dead Bug","Mountain Climber","Hollow Hold"],
   "Full Body":["Clean and Press","Power Clean","Snatch","Thruster","Kettlebell Swing","Burpee","Farmer's Walk","Sled Push","Battle Ropes","Turkish Get-Up"]
 };
-var libTarget = -1, libGroup = "All", demoName = "", demoGroup = "", demoCache = {};
+var libTarget = -1, libGroup = "All", demoName = "", demoGroup = "";
 
 function openLib(i) {
   libTarget = i;
@@ -1141,7 +1175,7 @@ function renderLib() {
       b.querySelector(".lib-item-name").textContent = n;
       b.querySelector(".lib-item-grp").textContent = g;
       b.onclick = function() { pickExercise(n); };
-      var d = document.createElement("button"); d.className = "lib-demo-btn"; d.textContent = "🎬";
+      var d = document.createElement("button"); d.className = "lib-demo-btn" + (WGER_IMG[n] ? " has-img" : ""); d.textContent = "🎬";
       d.onclick = function() { openDemo(n, g); };
       row.appendChild(b); row.appendChild(d);
       c.appendChild(row);
@@ -1182,48 +1216,104 @@ function useDemo() { pickExercise(demoName); }
 function openYouTube() {
   window.open("https://www.youtube.com/results?search_query=" + encodeURIComponent(demoName + " exercise proper form"), "_blank");
 }
-function paintDemo(m, url) {
-  if (m.getAttribute("data-for") !== demoName) return;
+var WGER_BASE = "https://wger.de/media/exercise-images/";
+var WGER_IMG = {
+  "Barbell Bench Press": ["192/Bench-press-1.png.400x400_q85.png", "192/Bench-press-1.png"],
+  "Incline Barbell Bench Press": ["41/Incline-bench-press-1.png.400x400_q85.jpg", "41/Incline-bench-press-1.png"],
+  "Decline Bench Press": ["100/Decline-bench-press-1.png.400x400_q85.jpg", "100/Decline-bench-press-1.png"],
+  "Dumbbell Bench Press": ["97/Dumbbell-bench-press-1.png.400x400_q85.jpg", "97/Dumbbell-bench-press-1.png"],
+  "Incline Dumbbell Press": ["16/Incline-press-1.png.400x400_q85.png", "16/Incline-press-1.png"],
+  "Dumbbell Fly": ["238/2fc242d3-5bdd-4f97-99bd-678adb8c96fc.png.400x400_q85.jpg", "238/2fc242d3-5bdd-4f97-99bd-678adb8c96fc.png"],
+  "Pec Deck": ["98/Butterfly-machine-2.png.400x400_q85.jpg", "98/Butterfly-machine-2.png"],
+  "Machine Chest Press": ["129/b263c968-e067-4750-916a-d8758a7df23e.webp.400x400_q85.jpg", "129/b263c968-e067-4750-916a-d8758a7df23e.webp"],
+  "Push-Up": ["1551/a6a9e561-3965-45c6-9f2b-ee671e1a3a45.png.400x400_q85.jpg", "1551/a6a9e561-3965-45c6-9f2b-ee671e1a3a45.png"],
+  "Chest Dip": ["194/34600351-8b0b-4cb0-8daa-583537be15b0.png.400x400_q85.png", "194/34600351-8b0b-4cb0-8daa-583537be15b0.png"],
+  "Deadlift": ["184/1709c405-620a-4d07-9658-fade2b66a2df.jpeg.400x400_q85.jpg", "184/1709c405-620a-4d07-9658-fade2b66a2df.jpeg"],
+  "Rack Pull": ["161/Dead-lifts-2.png.400x400_q85.jpg", "161/Dead-lifts-2.png"],
+  "Barbell Row": ["109/Barbell-rear-delt-row-1.png.400x400_q85.jpg", "109/Barbell-rear-delt-row-1.png"],
+  "Dumbbell Row": ["81/a751a438-ae2d-4751-8d61-cef0e9292174.png.400x400_q85.jpg", "81/a751a438-ae2d-4751-8d61-cef0e9292174.png"],
+  "T-Bar Row": ["106/T-bar-row-1.png.400x400_q85.png", "106/T-bar-row-1.png"],
+  "Seated Cable Row": ["1117/2555c4c3-a84d-47db-b83b-cbf721f12e45.png.400x400_q85.jpg", "1117/2555c4c3-a84d-47db-b83b-cbf721f12e45.png"],
+  "Pull-Up": ["475/b0554016-16fd-4dbe-be47-a2a17d16ae0e.jpg.400x400_q85.jpg", "475/b0554016-16fd-4dbe-be47-a2a17d16ae0e.jpg"],
+  "Chin-Up": ["152/6c1a7459-266d-491a-bd50-7cbaea2bc771.png.400x400_q85.png", "152/6c1a7459-266d-491a-bd50-7cbaea2bc771.png"],
+  "Straight-Arm Pulldown": ["1726/2e7e541b-5f55-405a-ae78-3e71b3f42db4.png.400x400_q85.jpg", "1726/2e7e541b-5f55-405a-ae78-3e71b3f42db4.png"],
+  "Overhead Press": ["1893/7dbad19e-0616-41fd-9d7d-3e21649c0eea.png.400x400_q85.png", "1893/7dbad19e-0616-41fd-9d7d-3e21649c0eea.png"],
+  "Push Press": ["478/70a2d72c-a822-45f3-8de2-54ea85951b84.jpg.400x400_q85.jpg", "478/70a2d72c-a822-45f3-8de2-54ea85951b84.jpg"],
+  "Machine Shoulder Press": ["53/Shoulder-press-machine-2.png.400x400_q85.png", "53/Shoulder-press-machine-2.png"],
+  "Lateral Raise": ["148/lateral-dumbbell-raises-large-2.png.400x400_q85.jpg", "148/lateral-dumbbell-raises-large-2.png"],
+  "Cable Lateral Raise": ["148/lateral-dumbbell-raises-large-2.png.400x400_q85.jpg", "148/lateral-dumbbell-raises-large-2.png"],
+  "Front Raise": ["256/b7def5bc-2352-499b-b9e5-fff741003831.png.400x400_q85.jpg", "256/b7def5bc-2352-499b-b9e5-fff741003831.png"],
+  "Rear Delt Fly": ["822/74affc0d-03b6-4f33-b5f4-a822a2615f68.png.400x400_q85.jpg", "822/74affc0d-03b6-4f33-b5f4-a822a2615f68.png"],
+  "Upright Row": ["693/05c91bd2-7814-40b6-b2d1-51ae942b8321.png.400x400_q85.jpg", "693/05c91bd2-7814-40b6-b2d1-51ae942b8321.png"],
+  "Shrug": ["150/Barbell-shrugs-1.png.400x400_q85.png", "150/Barbell-shrugs-1.png"],
+  "Back Squat": ["1801/60043328-1cfb-4289-9865-aaf64d5aaa28.jpg.400x400_q85.jpg", "1801/60043328-1cfb-4289-9865-aaf64d5aaa28.jpg"],
+  "Front Squat": ["191/Front-squat-1-857x1024.png.400x400_q85.png", "191/Front-squat-1-857x1024.png"],
+  "Hack Squat": ["130/Narrow-stance-hack-squats-1-1024x721.png.400x400_q85.png", "130/Narrow-stance-hack-squats-1-1024x721.png"],
+  "Leg Press": ["371/d2136f96-3a43-4d4c-9944-1919c4ca1ce1.webp.400x400_q85.png", "371/d2136f96-3a43-4d4c-9944-1919c4ca1ce1.webp"],
+  "Goblet Squat": ["203/1c052351-2af0-4227-aeb0-244008e4b0a8.jpeg.400x400_q85.jpg", "203/1c052351-2af0-4227-aeb0-244008e4b0a8.jpeg"],
+  "Romanian Deadlift": ["1652/0306c8c0-70cc-45d4-92de-6fa72ceaa834.webp.400x400_q85.jpg", "1652/0306c8c0-70cc-45d4-92de-6fa72ceaa834.webp"],
+  "Bulgarian Split Squat": ["988/6283b258-a4d7-4833-84f7-a38987022d3d.png.400x400_q85.jpg", "988/6283b258-a4d7-4833-84f7-a38987022d3d.png"],
+  "Walking Lunge": ["113/Walking-lunges-1.png.400x400_q85.jpg", "113/Walking-lunges-1.png"],
+  "Step-Up": ["981/f9377a7e-eb58-4cca-b805-2d36863aeb03.png.400x400_q85.png", "981/f9377a7e-eb58-4cca-b805-2d36863aeb03.png"],
+  "Leg Extension": ["369/78c915d1-e46d-4d30-8124-65d68664c3ef.png.400x400_q85.jpg", "369/78c915d1-e46d-4d30-8124-65d68664c3ef.png"],
+  "Lying Leg Curl": ["364/b318dde9-f5f2-489f-940a-cd864affb9e3.png.400x400_q85.png", "364/b318dde9-f5f2-489f-940a-cd864affb9e3.png"],
+  "Hip Thrust": ["1642/a81ad922-caf5-47f8-99b4-640cb0717436.webp.400x400_q85.jpg", "1642/a81ad922-caf5-47f8-99b4-640cb0717436.webp"],
+  "Standing Calf Raise": ["622/9a429bd0-afd3-4ad0-8043-e9beec901c81.jpeg.400x400_q85.jpg", "622/9a429bd0-afd3-4ad0-8043-e9beec901c81.jpeg"],
+  "Seated Calf Raise": ["1620/edd40e39-e337-4460-a8dd-6127d40ddd16.jpeg.400x400_q85.jpg", "1620/edd40e39-e337-4460-a8dd-6127d40ddd16.jpeg"],
+  "Barbell Curl": ["74/Bicep-curls-1.png.400x400_q85.png", "74/Bicep-curls-1.png"],
+  "Dumbbell Curl": ["1192/651a4535-8210-4dbd-8f06-61d95fdd9963.png.400x400_q85.jpg", "1192/651a4535-8210-4dbd-8f06-61d95fdd9963.png"],
+  "Hammer Curl": ["86/Bicep-hammer-curl-1.png.400x400_q85.png", "86/Bicep-hammer-curl-1.png"],
+  "Preacher Curl": ["193/Preacher-curl-3-1.png.400x400_q85.png", "193/Preacher-curl-3-1.png"],
+  "Concentration Curl": ["1109/00b0a0bf-c14a-4f13-bb14-62c09030a1aa.png.400x400_q85.jpg", "1109/00b0a0bf-c14a-4f13-bb14-62c09030a1aa.png"],
+  "Close-Grip Bench Press": ["88/Narrow-grip-bench-press-1.png.400x400_q85.png", "88/Narrow-grip-bench-press-1.png"],
+  "Skull Crusher": ["84/Lying-close-grip-triceps-press-to-chin-1.png.400x400_q85.png", "84/Lying-close-grip-triceps-press-to-chin-1.png"],
+  "Overhead Tricep Extension": ["1519/fab7f641-27d4-40b5-8edd-1a0a137bfd94.gif"],
+  "Tricep Rope Pushdown": ["1900/a8243245-8f8f-4e2b-93ca-694d416cb11d.png.400x400_q85.png", "1900/a8243245-8f8f-4e2b-93ca-694d416cb11d.png"],
+  "Tricep Cable Pushdown": ["805/7a437824-e2cc-46e1-804a-674f0ea31d25.png.400x400_q85.png", "805/7a437824-e2cc-46e1-804a-674f0ea31d25.png"],
+  "Tricep Dip": ["83/Bench-dips-1.png.400x400_q85.png", "83/Bench-dips-1.png"],
+  "Plank": ["458/b7bd9c28-9f1d-4647-bd17-ab6a3adf5770.png.400x400_q85.png", "458/b7bd9c28-9f1d-4647-bd17-ab6a3adf5770.png"],
+  "Hanging Leg Raise": ["979/27097a3a-5749-428d-b94c-6082afe390f6.png.400x400_q85.png", "979/27097a3a-5749-428d-b94c-6082afe390f6.png"],
+  "Crunch": ["91/Crunches-1.png.400x400_q85.png", "91/Crunches-1.png"],
+  "Russian Twist": ["1193/70ca5d80-3847-4a8c-8882-c6e9e485e29e.png.400x400_q85.png", "1193/70ca5d80-3847-4a8c-8882-c6e9e485e29e.png"],
+  "Ab Wheel Rollout": ["1573/a9ab402b-61ef-4d60-b91a-df52bf7f41a9.jpg.400x400_q85.png", "1573/a9ab402b-61ef-4d60-b91a-df52bf7f41a9.jpg"],
+  "Hollow Hold": ["297/b10d3341-baa8-49ab-b462-5b3529389aac.png.400x400_q85.png", "297/b10d3341-baa8-49ab-b462-5b3529389aac.png"],
+  "Clean and Press": ["1901/046f0f42-0ed5-48c5-a9ee-41de25e3b6a0.png.400x400_q85.jpg", "1901/046f0f42-0ed5-48c5-a9ee-41de25e3b6a0.png"],
+  "Kettlebell Swing": ["960/da4d0560-da89-4bb5-b91f-746458fb04ad.png.400x400_q85.png", "960/da4d0560-da89-4bb5-b91f-746458fb04ad.png"]
+};
+
+function demoFallback(m) {
+  m.innerHTML = '<div class="demo-fb"><div class="demo-fb-i">🎬</div><div class="demo-fb-t">No photo for this one in the wger library. Tap Watch on YouTube for a video demonstration.</div></div>';
   var src = document.getElementById("demoSrc");
-  if (!url) {
-    m.innerHTML = '<div class="demo-fb"><div class="demo-fb-i">🎬</div><div class="demo-fb-t">No demo image found for this one. Tap Watch on YouTube for a video demonstration.</div></div>';
-    if (src) src.textContent = "";
-    return;
-  }
-  m.innerHTML = "";
-  var img = document.createElement("img");
-  img.alt = demoName;
-  img.onerror = function() { paintDemo(m, null); };
-  img.src = url;
-  m.appendChild(img);
-  if (src) src.textContent = "Image via wger.de";
+  if (src) src.textContent = "";
 }
 function loadDemoMedia(name, m) {
   m.setAttribute("data-for", name);
-  if (demoCache.hasOwnProperty(name)) { paintDemo(m, demoCache[name]); return; }
-  if (!window.fetch) { paintDemo(m, null); return; }
-  var settled = false;
-  var to = setTimeout(function() {
+  var srcs = WGER_IMG[name];
+  if (!srcs || !srcs.length) { demoFallback(m); return; }
+  var attempt = 0, settled = false, to = null;
+  function give() {
     if (settled) return; settled = true;
-    demoCache[name] = null; paintDemo(m, null);
-  }, 7000);
-  var fail = function() {
-    if (settled) return; settled = true; clearTimeout(to);
-    demoCache[name] = null; paintDemo(m, null);
-  };
-  fetch("https://wger.de/api/v2/exercise/search/?language=2&format=json&term=" + encodeURIComponent(name))
-    .then(function(r) { if (!r.ok) throw new Error("bad status"); return r.json(); })
-    .then(function(j) {
-      if (settled) return; settled = true; clearTimeout(to);
-      var sug = (j && j.suggestions) || [], url = null;
-      for (var i = 0; i < sug.length; i++) {
-        var d = sug[i].data || {};
-        if (d.image) { url = d.image.indexOf("http") === 0 ? d.image : "https://wger.de" + d.image; break; }
-      }
-      demoCache[name] = url;
-      paintDemo(m, url);
-    })
-    .catch(fail);
+    if (to) clearTimeout(to);
+    if (m.getAttribute("data-for") === name) demoFallback(m);
+  }
+  function tryNext() {
+    if (attempt >= srcs.length) { give(); return; }
+    var path = srcs[attempt++];
+    var img = document.createElement("img");
+    img.alt = name;
+    img.onload = function() {
+      if (settled) return; settled = true;
+      if (to) clearTimeout(to);
+      if (m.getAttribute("data-for") !== name) return;
+      m.innerHTML = ""; m.appendChild(img);
+      var src = document.getElementById("demoSrc");
+      if (src) src.textContent = "Photo via wger.de";
+    };
+    img.onerror = function() { if (!settled) tryNext(); };
+    img.src = WGER_BASE + path;
+  }
+  to = setTimeout(give, 12000);
+  tryNext();
 }
 
 migrateSt();
